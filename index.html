@@ -158,6 +158,8 @@ select {
 .role.imp { background: linear-gradient(160deg, #ff4d6d, #c8102e 65%, #6e0f22); color: #fff; }
 .role-inner { display: grid; gap: 10px; justify-items: center; width: 100%; }
 .fit { display: block; width: 100%; white-space: normal; }
+.role, .role-inner, .verdict, .starter, .cover-inner { grid-template-columns: minmax(0, 1fr); }
+.role-inner > *, .verdict > *, .starter > * { min-width: 0; max-width: 100%; }
 .role .tag { font-size: .72rem; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; opacity: .8; }
 .role .word { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 11vw, 3.2rem); line-height: .98; letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .role .hint { font-weight: 700; font-size: .95rem; opacity: .85; max-width: 26ch; line-height: 1.4; }
@@ -484,7 +486,7 @@ select {
     el.addEventListener("blur", end);
     document.addEventListener("visibilitychange", () => { if (document.hidden) end(); });
   }
-  bindHold($("hold"), null, () => {
+  bindHold($("hold"), refit, () => {
     game.seen = true;
     const last = game.turn === cfg.players.length - 1;
     const nb = $("next"); nb.disabled = false;
@@ -536,7 +538,7 @@ select {
     $("hold-reveal").hidden = false;
     $("verdict").hidden = true; $("scoring").hidden = true; $("after").hidden = true;
   }
-  bindHold($("hold-reveal"), null, () => {
+  bindHold($("hold-reveal"), refit, () => {
     const v = $("verdict"); v.innerHTML = "";
     const tag = document.createElement("span"); tag.className = "tag"; tag.style.cssText = "font-size:.72rem;font-weight:800;letter-spacing:.24em;text-transform:uppercase;opacity:.85";
     tag.textContent = game.imps.length > 1 ? "The imposters were" : "The imposter was";
@@ -561,7 +563,11 @@ select {
 
   renderSetup();
   window.addEventListener("resize", refit);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+  if (document.fonts) {
+    try { document.fonts.load('800 52px "Syne"').then(refit, () => {}); } catch (_) {}
+    document.fonts.addEventListener && document.fonts.addEventListener("loadingdone", refit);
+    if (document.fonts.ready) document.fonts.ready.then(refit);
+  }
 })();
 
 if ("serviceWorker" in navigator) {
