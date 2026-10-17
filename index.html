@@ -131,7 +131,7 @@ select {
 .progress i { flex: 1; height: 4px; border-radius: 4px; background: var(--line); }
 .progress i.done { background: var(--fg); }
 .progress i.now { background: var(--amber); }
-.passname { font-family: var(--display); font-weight: 800; font-size: clamp(2.6rem, 13vw, 3.6rem); line-height: .95; letter-spacing: -0.03em; margin: 4px 0 0; overflow-wrap: anywhere; }
+.passname { font-family: var(--display); font-weight: 800; font-size: clamp(2.6rem, 13vw, 3.6rem); line-height: .95; letter-spacing: -0.03em; margin: 4px 0 0; overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .hold {
   position: relative; width: 100%; aspect-ratio: 4 / 5; max-width: 100%; border: 0; padding: 0; cursor: pointer;
   border-radius: 28px; overflow: hidden;
@@ -156,15 +156,16 @@ select {
 .hold.on .cover { opacity: 0; }
 .role.crew { background: linear-gradient(160deg, #22e6d7, #0b8f86 70%, #075c57); color: #021514; }
 .role.imp { background: linear-gradient(160deg, #ff4d6d, #c8102e 65%, #6e0f22); color: #fff; }
-.role-inner { display: grid; gap: 10px; justify-items: center; }
+.role-inner { display: grid; gap: 10px; justify-items: center; width: 100%; }
+.fit { display: block; width: 100%; white-space: normal; }
 .role .tag { font-size: .72rem; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; opacity: .8; }
-.role .word { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 11vw, 3.2rem); line-height: .98; letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: anywhere; }
+.role .word { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 11vw, 3.2rem); line-height: .98; letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .role .hint { font-weight: 700; font-size: .95rem; opacity: .85; max-width: 26ch; line-height: 1.4; }
 .role .cat { display: inline-block; padding: 5px 11px; border-radius: 999px; background: rgba(0,0,0,.18); font-weight: 800; font-size: .8rem; }
 
 /* Talk */
 .starter { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: grid; gap: 6px; }
-.starter strong { font-family: var(--display); font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.starter strong { font-family: var(--display); font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: s; }
 .steps li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; line-height: 1.45; }
 .steps li::before { content: counter(s); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); border: 1px solid var(--line); font-weight: 800; font-size: .85rem; }
@@ -176,7 +177,7 @@ select {
 
 /* Reveal */
 .verdict { border-radius: 24px; padding: 22px; display: grid; gap: 14px; background: linear-gradient(160deg, #ff4d6d, #c8102e 65%, #6e0f22); color: #fff; }
-.verdict .who { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 11vw, 3rem); line-height: .98; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.verdict .who { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 11vw, 3rem); line-height: .98; letter-spacing: -0.02em; overflow-wrap: normal; word-break: normal; hyphens: manual; }
 .verdict .w { display: flex; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.3); font-weight: 700; flex-wrap: wrap; }
 .verdict .w b { font-family: var(--display); font-size: 1.3rem; }
 .scoring { display: grid; gap: 8px; font-size: .92rem; color: var(--muted); line-height: 1.45; }
@@ -244,7 +245,7 @@ select {
   <div class="progress" id="progress"></div>
   <div>
     <p class="eyebrow">Pass the phone to</p>
-    <p class="passname" id="passname">Player</p>
+    <p class="passname fit" id="passname">Player</p>
   </div>
   <button class="hold" id="hold" type="button" aria-label="Hold to see your card">
     <div class="cover"><div class="cover-inner">
@@ -265,7 +266,7 @@ select {
   </div>
   <div class="starter">
     <p class="eyebrow">Goes first</p>
-    <strong id="starter">Player</strong>
+    <strong class="fit" id="starter">Player</strong>
     <span class="lede" id="direction">then carry on clockwise</span>
   </div>
   <ol class="steps">
@@ -349,9 +350,22 @@ select {
 
   let game = null;
 
+  // Shrink text until the longest word fits on one line, so words never split
+  function fit(el, maxPx, minPx) {
+    if (!el) return;
+    minPx = minPx || 16;
+    let size = maxPx;
+    el.style.fontSize = size + "px";
+    while (el.scrollWidth > el.clientWidth + 1 && size > minPx) { size -= 2; el.style.fontSize = size + "px"; }
+  }
+  function refit() {
+    document.querySelectorAll(".screen:not([hidden]) [data-fit], .screen:not([hidden]) .fit").forEach(el => fit(el, +(el.dataset.fit || el.dataset.max || 56)));
+  }
+
   function show(id) {
     ["s-setup","s-pass","s-talk","s-reveal"].forEach(s => $(s).hidden = s !== id);
     window.scrollTo(0, 0);
+    requestAnimationFrame(refit);
   }
 
   /* ---------- Setup ---------- */
@@ -429,14 +443,14 @@ select {
   function renderPass() {
     const n = cfg.players.length;
     $("progress").innerHTML = cfg.players.map((_, i) => '<i class="' + (i < game.turn ? "done" : i === game.turn ? "now" : "") + '"></i>').join("");
-    $("passname").textContent = cfg.players[game.turn];
+    $("passname").textContent = cfg.players[game.turn]; $("passname").dataset.fit = 58;
     const isImp = game.imps.includes(game.turn);
     const role = $("role");
     role.className = "role " + (isImp ? "imp" : "crew");
     role.innerHTML = "";
     const inner = document.createElement("div"); inner.className = "role-inner";
     const tag = document.createElement("span"); tag.className = "tag";
-    const word = document.createElement("span"); word.className = "word";
+    const word = document.createElement("span"); word.className = "word fit"; word.dataset.fit = 52;
     if (isImp) {
       tag.textContent = "Shh";
       word.textContent = "You're the imposter";
@@ -451,6 +465,7 @@ select {
       inner.append(tag, word, c);
     }
     role.append(inner);
+    requestAnimationFrame(refit);
     game.seen = false;
     const nb = $("next");
     nb.disabled = true; nb.textContent = "Hold the card first";
@@ -486,7 +501,7 @@ select {
   const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   function stopClock() { clearInterval(tick); tick = null; }
   function renderTalk() {
-    $("starter").textContent = cfg.players[game.starter];
+    $("starter").textContent = cfg.players[game.starter]; $("starter").dataset.fit = 28;
     $("direction").textContent = "then " + cfg.players[(game.starter + 1) % cfg.players.length] + ", and on round the circle";
     stopClock(); left = cfg.timer;
     $("timerbox").hidden = !cfg.timer;
@@ -516,7 +531,7 @@ select {
     const u = $("unmask"); u.innerHTML = "";
     const inner = document.createElement("div"); inner.className = "role-inner";
     const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = plural ? "The imposters were" : "The imposter was";
-    const w = document.createElement("span"); w.className = "word"; w.textContent = impNames();
+    const w = document.createElement("span"); w.className = "word fit"; w.dataset.fit = 52; w.textContent = impNames();
     inner.append(tag, w); u.append(inner);
     $("hold-reveal").hidden = false;
     $("verdict").hidden = true; $("scoring").hidden = true; $("after").hidden = true;
@@ -525,7 +540,7 @@ select {
     const v = $("verdict"); v.innerHTML = "";
     const tag = document.createElement("span"); tag.className = "tag"; tag.style.cssText = "font-size:.72rem;font-weight:800;letter-spacing:.24em;text-transform:uppercase;opacity:.85";
     tag.textContent = game.imps.length > 1 ? "The imposters were" : "The imposter was";
-    const who = document.createElement("span"); who.className = "who"; who.textContent = impNames();
+    const who = document.createElement("span"); who.className = "who fit"; who.dataset.fit = 48; who.textContent = impNames();
     const row = document.createElement("div"); row.className = "w";
     const l = document.createElement("span"); l.textContent = "The word was";
     const b = document.createElement("b"); b.textContent = game.word;
@@ -533,6 +548,7 @@ select {
     v.append(tag, who, row);
     $("hold-reveal").hidden = true;
     v.hidden = false; $("scoring").hidden = false; $("after").hidden = false;
+    requestAnimationFrame(refit);
   });
   $("again").addEventListener("click", deal);
   $("edit").addEventListener("click", () => { renderSetup(); show("s-setup"); });
@@ -544,6 +560,8 @@ select {
   document.addEventListener("keydown", e => { if (e.key === "Escape") $("rules").hidden = true; });
 
   renderSetup();
+  window.addEventListener("resize", refit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
 })();
 
 if ("serviceWorker" in navigator) {
