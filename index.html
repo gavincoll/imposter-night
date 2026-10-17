@@ -198,7 +198,15 @@ select {
 .example { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; font-size: .9rem; line-height: 1.5; color: var(--muted); }
 .example b { color: var(--fg); }
 
-@media (prefers-reduced-motion: reduce) { .fp { animation: none; } * { transition: none !important; } }
+.flash {
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  display: grid; place-items: center; background: var(--imp); color: #fff;
+  animation: flash 2.2s ease-out forwards;
+}
+.flash span { font-family: var(--display); font-weight: 800; font-size: clamp(2.6rem, 14vw, 4.5rem); letter-spacing: -0.03em; text-transform: uppercase; animation: slam .35s cubic-bezier(.2,1.6,.4,1); }
+@keyframes flash { 0% { opacity: .95; } 12% { opacity: .25; } 24% { opacity: .9; } 36% { opacity: .2; } 50% { opacity: .85; } 80% { opacity: .6; } 100% { opacity: 0; } }
+@keyframes slam { from { transform: scale(2.2); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .fp, .flash span { animation: none; } .flash { animation: flash 2.2s steps(1, end) forwards; } * { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -501,7 +509,59 @@ select {
   /* ---------- Talk ---------- */
   let left = 0, tick = null;
   const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
-  function stopClock() { clearInterval(tick); tick = null; }
+  let audio = null, wake = null, endAt = 0, lastShown = -1;
+  function stopClock() { clearInterval(tick); tick = null; wakeOff(); }
+  function wakeOn() { try { navigator.wakeLock && navigator.wakeLock.request("screen").then(w => { wake = w; }).catch(() => {}); } catch (_) {} }
+  function wakeOff() { try { wake && wake.release(); } catch (_) {} wake = null; }
+
+  // Sound: unlocked on the Start tap, since phones only allow audio after a touch
+  function unlockAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!audio) audio = new AC();
+      if (audio.state === "suspended") audio.resume();
+      const b = audio.createBuffer(1, 1, 22050), src = audio.createBufferSource();
+      src.buffer = b; src.connect(audio.destination); src.start(0);
+    } catch (_) {}
+  }
+  function beep(freq, at, len, vol) {
+    const t = audio.currentTime + at;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = "square"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + len + 0.02);
+  }
+  function warning() { if (!audio) return; beep(988, 0, 0.16, 0.3); beep(988, 0.24, 0.16, 0.3); }
+  function tickSound(last) { if (!audio) return; beep(last ? 1320 : 880, 0, 0.08, 0.22); }
+  function buzzer() {
+    if (!audio) return;
+    const t = audio.currentTime;
+    const comp = audio.createDynamicsCompressor(); comp.connect(audio.destination);
+    const master = audio.createGain(); master.connect(comp);
+    master.gain.setValueAtTime(0.0001, t);
+    master.gain.exponentialRampToValueAtTime(0.9, t + 0.02);
+    master.gain.setValueAtTime(0.9, t + 1.6);
+    master.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    const shaper = audio.createWaveShaper(), n = 1024, curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = i * 2 / n - 1; curve[i] = Math.tanh(x * 4); }
+    shaper.curve = curve; shaper.connect(master);
+    [[98, "sawtooth", .5], [103.5, "sawtooth", .5], [196, "square", .25], [49, "square", .4]].forEach(([f, type, v]) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 0.94, t + 2.2);
+      g.gain.value = v; o.connect(g); g.connect(shaper); o.start(t); o.stop(t + 2.3);
+    });
+    const hit = audio.createOscillator(), hg = audio.createGain();
+    hit.type = "sine"; hit.frequency.setValueAtTime(160, t); hit.frequency.exponentialRampToValueAtTime(40, t + 0.4);
+    hg.gain.setValueAtTime(1, t); hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    hit.connect(hg); hg.connect(comp); hit.start(t); hit.stop(t + 0.55);
+  }
+  function flash() {
+    const f = document.createElement("div"); f.className = "flash"; f.innerHTML = "<span>Time's up</span>";
+    document.body.append(f); setTimeout(() => f.remove(), 2400);
+  }
   function renderTalk() {
     $("starter").textContent = cfg.players[game.starter]; $("starter").dataset.fit = 28;
     $("direction").textContent = "then " + cfg.players[(game.starter + 1) % cfg.players.length] + ", and on round the circle";
@@ -510,16 +570,36 @@ select {
     $("clock").textContent = fmt(left); $("clock").classList.remove("low");
     $("clock-btn").textContent = "Start timer";
   }
+  function update() {
+    const ms = endAt - Date.now();
+    const sec = Math.max(0, Math.ceil(ms / 1000));
+    left = sec;
+    if (sec !== lastShown) {
+      lastShown = sec;
+      $("clock").textContent = fmt(sec);
+      $("clock").classList.toggle("low", sec <= 30);
+      if (sec === 30 && cfg.timer > 30) warning();
+      if (sec > 0 && sec <= 5) tickSound(sec === 1);
+    }
+    if (ms <= 0) finish();
+  }
+  function finish() {
+    stopClock(); left = 0;
+    buzzer(); flash();
+    $("clock").textContent = "Vote!"; $("clock").classList.add("low");
+    $("clock-btn").textContent = "Restart";
+    try { navigator.vibrate && navigator.vibrate([400, 150, 400]); } catch (_) {}
+  }
   $("clock-btn").addEventListener("click", () => {
+    unlockAudio();
     if (tick) { stopClock(); $("clock-btn").textContent = "Resume"; return; }
     if (left <= 0) left = cfg.timer;
+    endAt = Date.now() + left * 1000; lastShown = -1;
     $("clock-btn").textContent = "Pause";
-    tick = setInterval(() => {
-      left--; $("clock").textContent = fmt(Math.max(0, left));
-      $("clock").classList.toggle("low", left <= 30);
-      if (left <= 0) { stopClock(); $("clock-btn").textContent = "Restart"; $("clock").textContent = "Vote!"; try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (_) {} }
-    }, 1000);
+    wakeOn();
+    tick = setInterval(update, 200); update();
   });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && tick) { wakeOn(); update(); } });
   $("to-reveal").addEventListener("click", () => { stopClock(); renderReveal(); show("s-reveal"); });
 
   /* ---------- Reveal ---------- */

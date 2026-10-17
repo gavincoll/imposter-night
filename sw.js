@@ -1,5 +1,5 @@
 // Imposter Night — offline service worker
-const CACHE = "imposter-night-v4";
+const CACHE = "imposter-night-v5";
 const CORE = [
   "./",
   "./index.html",
